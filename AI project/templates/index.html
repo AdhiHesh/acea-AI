@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Crop Recommendation System</title>
+
+  <!-- Bootstrap & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <style>
+    /* ==================== CSS VARIABLES ==================== */
+    :root {
+      --bg: #f8f6f2;
+      --card: #fff;
+      --text: #0b1220;
+      --muted: #6b7280;
+      --accent: #2ea041;
+      --accent-strong: #1f7a2d;
+      --card-border: rgba(11,18,32,0.06);
+      --success-bg: #e9f9ee;
+      --success-border: rgba(46,160,65,0.12);
+      --header-bg: linear-gradient(90deg, #ffffff, #fbfbfb);
+    }
+    
+    body.dark {
+      --bg: #0f1720;
+      --card: #0b1220;
+      --text: #e6f3ea;
+      --muted: #9aa6b2;
+      --accent: #44c063;
+      --accent-strong: #22a243;
+      --card-border: rgba(255,255,255,0.06);
+      --success-bg: rgba(68,192,99,0.08);
+      --success-border: rgba(68,192,99,0.18);
+      --header-bg: linear-gradient(90deg, #0b1220, #0f1724);
+    }
+    
+    /* ==================== LOADING SCREEN ==================== */
+    #loadingScreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg,);
+      background-blend-mode: overlay;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.6s, visibility 0.6s;
+      backdrop-filter: blur(3px);
+    }
+    
+    #loadingScreen::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('loading-bg.jpg') center/cover no-repeat;
+      z-index: -1;
+    }
+    
+    #loadingScreen.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+    
+    .loader-content {
+      text-align: center;
+      color: #fff;
+    }
+    
+    .loader-logo {
+      width: 140px;
+      height: 140px;
+      margin: 0 auto 30px;
+      animation: float 3s ease-in-out infinite;
+      filter: drop-shadow(0 10px 30px rgba(0,0,0,0.3));
+    }
+    
+    .loader-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    .loader-brand {
+      font-size: 3.2rem;
+      font-weight: 800;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #5de303, #479455, #3734f0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3s infinite;
+      background-size: 200% 200%;
+    }
+    
+    .loader-tagline {
+      font-size: 1.1rem;
+      color: rgba(6, 101, 31, 0.95);
+      margin-bottom: 35px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      font-weight: 300;
+    }
+    
+    .spinner {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto;
+      position: relative;
+    }
+    
+    .spinner div {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 5px solid transparent;
+      border-top-color: #fff;
+      position: absolute;
+      animation: spin 1s linear infinite;
+    }
+    
+    .spinner div:nth-child(2) {
+      border-top-color: rgba(255,255,255,0.7);
+      animation-duration: 1.5s;
+    }
+    
+    .spinner div:nth-child(3) {
+      border-top-color: rgba(255,255,255,0.4);
+      animation-duration: 2s;
+    }
+    
+    /* ==================== ANIMATIONS ==================== */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0px) scale(1); }
+      50% { transform: translateY(-25px) scale(1.05); }
+    }
+    
+    @keyframes shimmer {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    
+    /* ==================== BASE STYLES ==================== */
+    body {
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      transition: background 0.25s, color 0.25s;
+      color-scheme: light dark;
+    }
+    
+    /* ==================== HEADER ==================== */
+    .app-header {
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 1100;
+      box-shadow: 0 6px 20px rgba(6,12,20,0.04);
+    }
+    
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .brand img {
+      width: 66px;
+      height: 66px;
+      object-fit: contain;
+    }
+    
+    .title {
+      font-weight: 700;
+      font-size: 1.55rem;
+      color: var(--text);
+    }
+    
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    
+    /* ==================== MODE SWITCH ==================== */
+    .mode-switch {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .mode-btn {
+      width: 46px;
+      height: 30px;
+      border-radius: 999px;
+      padding: 3px;
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      background: transparent;
+    }
+    
+    .mode-btn .knob {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.22s, background 0.22s;
+    }
+    
+    .mode-btn.light .knob {
+      transform: translateX(-1px);
+      background: var(--accent-strong);
+      color: #fff;
+    }
+    
+    .mode-btn.dark .knob {
+      transform: translateX(18px);
+      background: #ffdd57;
+      color: #2b1a00;
+    }
+    
+    /* ==================== MAIN CONTAINER ==================== */
+    .container-main {
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 14px;
+    }
+    
+    /* ==================== CARDS ==================== */
+    .card {
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid var(--card-border);
+      background: var(--card);
+      box-shadow: 0 8px 24px rgba(6,12,20,0.04);
+      color: var(--text);
+    }
+    
+    .card h6 {
+      margin-bottom: 8px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    
+    /* ==================== FORMS ==================== */
+    label {
+      color: var(--text);
+    }
+    
+    .form-control {
+      background: var(--card);
+      color: var(--text);
+      border-color: var(--card-border);
+    }
+    
+    .form-control::placeholder {
+      color: var(--muted);
+      opacity: 1;
+    }
+    
+    .form-control:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 0.25rem rgba(46,160,65,0.25);
+    }
+    
+    .btn-primary {
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      border: none;
+      color: #fff;
+    }
+    
+    /* ==================== PREDICTION BOX ==================== */
+    .prediction-box {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      font-weight: 600;
+    }
+    
+    /* ==================== MAP ==================== */
+    .card:has(#map) {
+      padding: 16px;
+      padding-top: 140px; /* reserve space for the title above the map */
+      overflow: hidden;   /* clip map corners to card radius */
+      position: relative; /* allow future overlays */
+      margin-top: -90px;
+      height: 435px;
+    }
+    /* overlay the card title in the top-left corner of the map card */
+    .card:has(#map) > h6 {
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      margin: 0;
+      z-index: 1200;
+      padding: 8px 12px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #map {
+      height: 400px;
+      border-radius: 10px;
+      width: 100%;
+      border: 1px solid var(--card-border);
+      margin-top: -110px;
+    }
+    
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+    
+    .leaflet-control-zoom a,
+    .leaflet-control-layers-toggle {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+    
+    .leaflet-control-attribution,
+    .leaflet-control-attribution a {
+      color: var(--muted) !important;
+    }
+    
+    /* ==================== CHART ==================== */
+    #npkChart {
+      max-width: 100%;
+      width: 100%;
+      display: block;
+    }
+    
+    /* ==================== LAYOUT ==================== */
+    .row.g-3 > .col-12 {
+      margin-top: 4px;
+    }
+    
+    /* ==================== FOOTER ==================== */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      margin-top: 50px;
+    }
+  </style>
+</head>
+<body>
+  <!-- ==================== LOADING SCREEN ==================== -->
+  <div id="loadingScreen">
+    <div class="loader-content">
+      <div class="loader-logo">
+        <img src="logo.png" alt="Acrea AI" onerror="this.style.display='none'">
+      </div>
+      <div class="loader-brand">Acrea AI</div>
+      <div class="loader-tagline">Smart Crop Intelligence</div>
+      <div class="spinner">
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== HEADER ==================== -->
+  <header class="app-header">
+    <div class="brand">
+      <img src="logo.png" alt="Logo" onerror="this.style.display='none'">
+      <div>
+        <div class="title">Acrea AI</div>
+        <div class="subtitle">Smart Crop · Live weather & recommendations</div>
+      </div>
+    </div>
+    <div class="mode-switch">
+      <div id="modeLabel">Light</div>
+      <button id="modeBtn" class="mode-btn light">
+        <div class="knob">
+          <i id="modeIcon" class="fa-solid fa-sun" style="font-size:12px;"></i>
+        </div>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT ==================== -->
+  <main class="container-main">
+    <div class="row g-3">
+      
+      <!-- Location Card -->
+      <div class="col-12 col-md-4">
+        <div class="card">
+          <h6>📍 Location</h6>
+          <p id="location">Detecting location…</p>
+          <small>Last updated: <span id="locUpdated">—</span></small>
+        </div>
+      </div>
+
+      <!-- Weather Card -->
+      <div class="col-12 col-md-4">
+        <div class="card">
+          <h6>🌦 Weather</h6>
+          <p id="weather">Waiting for weather data…</p>
+          <div>
+            <div>Temperature: <strong id="tempVal">—</strong></div>
+            <div>Humidity: <strong id="humVal">—</strong></div>
+            <div>Rainfall: <strong id="rainVal">—</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recommended Crop Card -->
+      <div class="col-12 col-md-4">
+        <div class="card">
+          <h6>🌱 Recommended Crop</h6>
+          <p id="cropResult">Calculating…</p>
+          <form id="cropForm">
+            <div class="row g-2">
+              <div class="col-4">
+                <label>N</label>
+                <input id="N" class="form-control form-control-sm" type="number" value="0">
+              </div>
+              <div class="col-4">
+                <label>P</label>
+                <input id="P" class="form-control form-control-sm" type="number" value="0">
+              </div>
+              <div class="col-4">
+                <label>K</label>
+                <input id="K" class="form-control form-control-sm" type="number" value="0">
+              </div>
+            </div>
+            <div class="row g-2 mt-2">
+              <div class="col-6">
+                <label>pH</label>
+                <input id="ph" class="form-control form-control-sm" type="number" value="7.0">
+              </div>
+              <div class="col-6">
+                <label>City</label>
+                <input id="city_name" class="form-control form-control-sm" type="text">
+              </div>
+            </div>
+            <input type="hidden" id="temperature">
+            <input type="hidden" id="humidity">
+            <input type="hidden" id="rainfall">
+            <button id="predictBtn" class="btn btn-primary btn-sm w-100 mt-3">
+              Get Crop Recommendation
+            </button>
+          </form>
+          <div id="predictionBox" class="prediction-box" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Map Card -->
+      <div class="col-12 col-lg-8 mx-auto">
+        <div class="card">
+          <h6>🗺 Live Map</h6>
+          <div id="map"></div>
+        </div>
+      </div>
+
+      <!-- Soil Nutrients Chart Card -->
+      <div class="col-12 col-md-4">
+        <div class="card">
+          <h6>📊 Soil Nutrients (N-P-K)</h6>
+          <div style="height:280px; width:100%;">
+            <canvas id="npkChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      
+      
+    </div>
+    
+    <!-- Footer -->
+    <footer>© 2025 Acrea AI - Smart Crop Intelligence</footer>
+  </main>
+
+  <!-- ==================== EXTERNAL SCRIPTS ==================== -->
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  
+  <!-- Leaflet -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- ==================== MAIN JAVASCRIPT ==================== -->
+  <script>
+    // ==================== CONFIGURATION ====================
+    const OPENWEATHER_API_KEY = "0fff01f23211490ebad520232ea5bd07";
+    const FALLBACK_COORDS = { lat: 7.8731, lon: 80.7718 };
+
+    // ==================== LOADING SCREEN ====================
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        document.getElementById('loadingScreen').classList.add('hidden');
+      }, 1200);
+    });
+    
+    // ==================== THEME TOGGLE ====================
+    const body = document.body;
+    const modeBtn = document.getElementById('modeBtn');
+    const modeIcon = document.getElementById('modeIcon');
+    const modeLabel = document.getElementById('modeLabel');
+    
+    function applyTheme(isDark) {
+      body.classList.toggle('dark', isDark);
+      modeBtn.classList.toggle('dark', isDark);
+      modeBtn.classList.toggle('light', !isDark);
+      modeIcon.className = isDark ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+      modeLabel.innerText = isDark ? 'Dark' : 'Light';
+      localStorage.setItem('uiTheme', isDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+    }
+    
+    applyTheme(localStorage.getItem('uiTheme') === 'dark');
+    
+    modeBtn.addEventListener('click', () => { 
+      applyTheme(!body.classList.contains('dark'));
+      refreshChartColors();
+    });
+
+    // ==================== MAP ====================
+    const map = L.map('map').setView([FALLBACK_COORDS.lat, FALLBACK_COORDS.lon], 7);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    
+    let marker = null;
+    function setMarker(lat, lon, label) {
+      if (marker) map.removeLayer(marker);
+      marker = L.marker([lat, lon]).addTo(map).bindPopup("📍 " + label).openPopup();
+      map.setView([lat, lon], 12);
+    }
+
+    // ==================== GEOLOCATION + WEATHER ====================
+    async function reverseGeocode(lat, lon) {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+        const j = await res.json();
+        return j.display_name || `${lat},${lon}`;
+      } catch {
+        return `${lat},${lon}`;
+      }
+    }
+
+    async function updateLocationAndWeather(lat, lon) {
+      const name = await reverseGeocode(lat, lon);
+      document.getElementById('location').innerText = `${name} (${lat.toFixed(2)}, ${lon.toFixed(2)})`;
+      document.getElementById('locUpdated').innerText = new Date().toLocaleTimeString();
+      setMarker(lat, lon, name);
+      
+      try {
+        const r = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric`);
+        const d = await r.json();
+        const t = d.main.temp;
+        const h = d.main.humidity;
+        const rain = (d.rain && (d.rain['1h'] || d.rain['3h'])) || 0;
+        
+        document.getElementById('tempVal').innerText = `${t.toFixed(1)}°C`;
+        document.getElementById('humVal').innerText = `${h}%`;
+        document.getElementById('rainVal').innerText = `${rain} mm`;
+        document.getElementById('temperature').value = t;
+        document.getElementById('humidity').value = h;
+        document.getElementById('rainfall').value = rain;
+        document.getElementById('weather').innerText = `🌡 ${t.toFixed(1)}°C | 💧 ${h}% | 🌧 ${rain}mm`;
+      } catch {
+        document.getElementById('weather').innerText = '⚠️ Weather fetch failed.';
+      }
+    }
+
+    function startTracking() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          p => updateLocationAndWeather(p.coords.latitude, p.coords.longitude),
+          () => updateLocationAndWeather(FALLBACK_COORDS.lat, FALLBACK_COORDS.lon)
+        );
+      } else {
+        updateLocationAndWeather(FALLBACK_COORDS.lat, FALLBACK_COORDS.lon);
+      }
+    }
+    startTracking();
+
+    // ==================== CHART ====================
+    function cssVar(name) { 
+      return getComputedStyle(document.body).getPropertyValue(name).trim(); 
+    }
+    const npkCtx = document.getElementById('npkChart').getContext('2d');
+    let npkChart = new Chart(npkCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Nitrogen (N)', 'Phosphorus (P)', 'Potassium (K)'],
+        datasets: [{
+          label: 'Nutrient Level',
+          data: [0, 0, 0],
+          backgroundColor: cssVar('--accent'),
+          borderColor: cssVar('--accent-strong'),
+          borderWidth: 2,
+          borderRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: cssVar('--muted') }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: cssVar('--muted') }, grid: { color: 'rgba(11,18,32,0.08)' } }
+        }
+      }
+    });
+    function updateNPKChart() {
+      const n = Number(document.getElementById('N').value) || 0;
+      const p = Number(document.getElementById('P').value) || 0;
+      const k = Number(document.getElementById('K').value) || 0;
+      npkChart.data.datasets[0].data = [n, p, k];
+      npkChart.update();
+    }
+    ['N', 'P', 'K'].forEach(id => document.getElementById(id).addEventListener('input', updateNPKChart));
+
+    function refreshChartColors() {
+      const accent = cssVar('--accent');
+      const accentStrong = cssVar('--accent-strong');
+      const muted = cssVar('--muted');
+      const gridColor = body.classList.contains('dark') 
+        ? 'rgba(255,255,255,0.08)' 
+        : 'rgba(11,18,32,0.08)';
+      npkChart.data.datasets[0].backgroundColor = accent;
+      npkChart.data.datasets[0].borderColor = accentStrong;
+      npkChart.options.scales.x.ticks.color = muted;
+      npkChart.options.scales.y.ticks.color = muted;
+      npkChart.options.scales.y.grid.color = gridColor;
+      npkChart.update('none');
+    }
+
+    // ==================== CROP RECOMMENDATION CONNECTION ====================
+    const cropForm = document.getElementById('cropForm');
+    const cropResult = document.getElementById('cropResult');
+    const predictionBox = document.getElementById('predictionBox');
+
+    cropForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      cropResult.innerText = "Calculating…";
+      predictionBox.style.display = "none";
+
+      const payload = {
+        N: Number(document.getElementById('N').value),
+        P: Number(document.getElementById('P').value),
+        K: Number(document.getElementById('K').value),
+        ph: Number(document.getElementById('ph').value),
+        temperature: Number(document.getElementById('temperature').value),
+        humidity: Number(document.getElementById('humidity').value),
+        rainfall: Number(document.getElementById('rainfall').value),
+        city_name: await (async () => {
+          const el = document.getElementById('city_name');
+          const manual = el.value.trim();
+          if (manual) return manual;
+
+          try {
+            const pos = (typeof marker !== 'undefined' && marker) ? marker.getLatLng()
+                : (typeof map !== 'undefined' && map.getCenter) ? map.getCenter()
+                : FALLBACK_COORDS;
+            const lat = pos.lat ?? FALLBACK_COORDS.lat;
+            const lon = (pos.lng ?? pos.lon) ?? FALLBACK_COORDS.lon;
+
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+            const j = await res.json();
+            const a = j.address || {};
+            const name = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || a.state || '';
+
+            if (!manual && name) el.value = name; // autofill input for user visibility
+            return name;
+          } catch {
+            // fallback: strip coords from the visible location text if available
+            const fromText = (document.getElementById('location')?.innerText || '').split('(')[0].trim();
+            if (!manual && fromText) el.value = fromText;
+            return fromText || '';
+          }
+        })()
+      };
+
+      try {
+        const res = await fetch('http://127.0.0.1:5000/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.recommended_crop) {
+          cropResult.innerText = `✅ Recommended Crop: ${data.recommended_crop}`;
+        } else {
+          cropResult.innerText = "⚠️ No recommendation found.";
+        }
+      } catch (err) {
+        cropResult.innerText = "⚠️ Error connecting to server.";
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
